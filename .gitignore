@@ -7,6 +7,9 @@
 *.ear
 *.tar.gz
 
+# Log Files #
+logs/
+
 # Maven Files #
 target/
 .mvn/wrapper/maven-wrapper.jar

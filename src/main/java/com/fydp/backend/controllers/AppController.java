@@ -1,9 +1,10 @@
 package com.fydp.backend.controllers;
 
-import org.apache.tika.metadata.Metadata;
-import org.apache.tika.parser.ParseContext;
-import org.apache.tika.parser.pdf.PDFParser;
-import org.apache.tika.sax.BodyContentHandler;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +20,7 @@ public class AppController {
 
     private static final Logger logger = LoggerFactory.getLogger(AppController.class);
     private static final String UPLOAD_PATH = System.getProperty("user.dir") + "/upload_files/";
+    private PDDocument doc = null;
 
     @RequestMapping("/")
     public String welcome() {
@@ -27,7 +29,7 @@ public class AppController {
     }
 
     @PostMapping("/upload")
-    public void upload(@RequestParam("file") MultipartFile file) {
+    public String upload(@RequestParam("file") MultipartFile file) throws IOException {
         logger.debug("Upload endpoint hit");
 
         File pdfFile = new File(UPLOAD_PATH + file.getOriginalFilename());
@@ -45,29 +47,38 @@ public class AppController {
             logger.error("Error occurred while writing to file", ex);
         }
 
-        parsePDF(pdfFile);
+        String pdfText = parsePDF(pdfFile);
+        parseBookmarks();
+
+        doc.close();
+        return pdfText;
     }
 
-    private void parsePDF(File file) {
-        BodyContentHandler handler = new BodyContentHandler();
-        Metadata metadata = new Metadata();
-        ParseContext pcontext = new ParseContext();
-        PDFParser pdfparser = new PDFParser();
-        try (FileInputStream inputstream = new FileInputStream(file)) {
-            // parsing the document using PDF parser
-            pdfparser.parse(inputstream, handler, metadata,pcontext);
-
-            // output to logger for now
-            logger.info("Document content: " + handler.toString());
-            logger.info("Document metadata: ");
-            String[] names = metadata.names();
-            for (String name : names) {
-                logger.info(name + ":  " + metadata.get(name));
-            }
-
-        } catch (Exception ex) {
-            logger.error("Error occurred while parsing file", ex);
+    private String parsePDF(File file) {
+        try {
+            doc = PDDocument.load(file);
+            return new PDFTextStripper().getText(doc);
+        } catch (IOException ex) {
+            logger.error("Error loading the pdf file", ex);
         }
 
+        return null;
+    }
+
+    private void parseBookmarks() {
+        PDDocumentOutline outline = doc.getDocumentCatalog().getDocumentOutline();
+        if (outline != null) {
+            printBookmarks(outline);
+        }
+    }
+
+    private void printBookmarks(PDOutlineNode bookmark) {
+        PDOutlineItem current = bookmark.getFirstChild();
+        while (current != null)
+        {
+            logger.info(current.getTitle());
+            printBookmarks(current);
+            current = current.getNextSibling();
+        }
     }
 }
