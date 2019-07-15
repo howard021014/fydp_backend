@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+    <head>
+
+    </head>
+
+    <body>
+        <div>
+            <h1>Brevity</h1>
+        </div>
+
+        <div>
+            <p th:text="'Hello ' + ${user}"></p>
+        </div>
+
+        <div>
+            <form method="POST" action="/upload" enctype="multipart/form-data">
+                <table>
+                    <tr><td>Upload PDF:</td><td><input type="file" name="file" /></td></tr>
+                    <tr><td></td><td><input type="submit" value="Upload" /></td></tr>
+                </table>
+            </form>
+        </div>
+
+    </body>
+
+
+
+</html>

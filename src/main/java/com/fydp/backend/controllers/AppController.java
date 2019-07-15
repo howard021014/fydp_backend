@@ -7,15 +7,14 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlin
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
 
-@RestController
+@Controller
 public class AppController {
 
     private static final Logger logger = LoggerFactory.getLogger(AppController.class);
@@ -23,13 +22,14 @@ public class AppController {
     private PDDocument doc = null;
 
     @RequestMapping("/")
-    public String welcome() {
+    public String welcome(Model model) {
         logger.debug("Welcome endpoint hit");
-        return "This is the homepage.";
+        model.addAttribute("user", "demo_user");
+        return "index";
     }
 
-    @PostMapping("/upload")
-    public String upload(@RequestParam("file") MultipartFile file) throws IOException {
+    @PostMapping(value =("/upload"),headers=("content-type=multipart/*"))
+    public String upload(@RequestParam("file") MultipartFile file, Model model) throws IOException {
         logger.debug("Upload endpoint hit");
 
         File pdfFile = new File(UPLOAD_PATH + file.getOriginalFilename());
@@ -51,7 +51,8 @@ public class AppController {
         parseBookmarks();
 
         doc.close();
-        return pdfText;
+        model.addAttribute("pdf_text", pdfText);
+        return "output";
     }
 
     private String parsePDF(File file) {
