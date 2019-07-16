@@ -1,5 +1,6 @@
 package com.fydp.backend.controllers;
 
+import com.fydp.backend.kafka.KafkaProducer;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
@@ -7,6 +8,7 @@ import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlin
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +22,9 @@ public class AppController {
     private static final Logger logger = LoggerFactory.getLogger(AppController.class);
     private static final String UPLOAD_PATH = System.getProperty("user.dir") + "/upload_files/";
     private PDDocument doc = null;
+
+    @Autowired
+    private KafkaProducer producer;
 
     @RequestMapping("/")
     public String welcome(Model model) {
@@ -52,6 +57,7 @@ public class AppController {
 
         doc.close();
         model.addAttribute("pdf_text", pdfText);
+        producer.sendMessage(pdfText);
         return "output";
     }
 
