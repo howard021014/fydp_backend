@@ -13,13 +13,17 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 
 @Controller
 public class AppController {
 
     private static final Logger logger = LoggerFactory.getLogger(AppController.class);
     private static final String UPLOAD_PATH = System.getProperty("user.dir") + "/upload_files/";
-    private PDDocument doc = null;
 
     @RequestMapping("/")
     public String welcome(Model model) {
@@ -32,8 +36,31 @@ public class AppController {
     public String upload(@RequestParam("file") MultipartFile file, Model model) throws IOException {
         logger.debug("Upload endpoint hit");
 
+        String pdfText = "";
+        List<String> bookmarks = new ArrayList<>();
+        PDDocument document = parsePDF(loadPdfFile(file));
+        if (document != null) {
+            PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
+            if (outline != null) {
+                storeBookmarks(outline, bookmarks);
+            } else {
+                pdfText =  new PDFTextStripper().getText(document);
+            }
+        } else {
+            logger.error("Not able to load PDF");
+        }
+
+        document.close();
+        model.addAttribute("pdf_text", pdfText.isEmpty() ? bookmarks : pdfText);
+        return "output";
+    }
+
+    private File loadPdfFile(MultipartFile file) {
         File pdfFile = new File(UPLOAD_PATH + file.getOriginalFilename());
         try {
+            if (!Files.exists(Paths.get(UPLOAD_PATH))) {
+                Files.createDirectory(Paths.get(UPLOAD_PATH));
+            }
             if (!pdfFile.exists()) {
                 pdfFile.createNewFile();
             }
@@ -47,38 +74,26 @@ public class AppController {
             logger.error("Error occurred while writing to file", ex);
         }
 
-        String pdfText = parsePDF(pdfFile);
-        parseBookmarks();
-
-        doc.close();
-        model.addAttribute("pdf_text", pdfText);
-        return "output";
+        return pdfFile;
     }
 
-    private String parsePDF(File file) {
+    private PDDocument parsePDF(File file) {
+        PDDocument doc = null;
         try {
             doc = PDDocument.load(file);
-            return new PDFTextStripper().getText(doc);
+            return doc;
         } catch (IOException ex) {
             logger.error("Error loading the pdf file", ex);
         }
-
-        return null;
+        return doc;
     }
 
-    private void parseBookmarks() {
-        PDDocumentOutline outline = doc.getDocumentCatalog().getDocumentOutline();
-        if (outline != null) {
-            printBookmarks(outline);
-        }
-    }
-
-    private void printBookmarks(PDOutlineNode bookmark) {
+    private void storeBookmarks(PDOutlineNode bookmark, List<String> bookmarks) {
         PDOutlineItem current = bookmark.getFirstChild();
         while (current != null)
         {
-            logger.info(current.getTitle());
-            printBookmarks(current);
+            bookmarks.add(current.getTitle());
+            storeBookmarks(current, bookmarks);
             current = current.getNextSibling();
         }
     }

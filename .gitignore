@@ -10,6 +10,9 @@
 # Log Files #
 logs/
 
+# Upload Files #
+upload_files/
+
 # Maven Files #
 target/
 .mvn/wrapper/maven-wrapper.jar
