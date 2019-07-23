@@ -60,12 +60,14 @@ public class AppController {
     public PdfInfo upload(@RequestParam("file") MultipartFile file) throws IOException {
         logger.debug("Upload endpoint hit");
 
+        boolean containsBookMarks = false;
         String pdfText = "";
         PDDocument document = parsePDF(loadPdfFile(file));
         Map<String, Integer> map = new LinkedHashMap<>();
         if (document != null) {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline != null) {
+                containsBookMarks = true;
                 storeBookmarks(outline, map, 0);
             } else {
                 pdfText =  new PDFTextStripper().getText(document);
@@ -74,26 +76,30 @@ public class AppController {
             logger.error("Not able to load PDF");
         }
 
-        Pattern pattern = Pattern.compile(CHAPTER_REGEX);
-        for (Map.Entry<String, Integer> entry : map.entrySet()) {
-            Matcher match = pattern.matcher(entry.getKey());
-            if (match.find()) {
-                chapterPgMap.put(entry.getKey(), entry.getValue());
+        if (containsBookMarks) {
+            Pattern pattern = Pattern.compile(CHAPTER_REGEX);
+            for (Map.Entry<String, Integer> entry : map.entrySet()) {
+                Matcher match = pattern.matcher(entry.getKey());
+                if (match.find()) {
+                    chapterPgMap.put(entry.getKey(), entry.getValue());
+                }
             }
+
+            List<String> allChapters = new ArrayList<>(map.keySet());
+            List<String> chapters = new ArrayList<>(chapterPgMap.keySet());
+
+            String lastChapter = chapters.get(chapters.size() - 1);
+            String endOfLastChapter = allChapters.get(allChapters.indexOf(lastChapter) + 1);
+            chapterPgMap.put(endOfLastChapter, map.get(endOfLastChapter));
+            pdfInfo.setChapters(chapters);
+            pdfInfo.setChapterPgMap(chapterPgMap);
         }
 
-        List<String> allChapters = new ArrayList<>(map.keySet());
-        List<String> chapters = new ArrayList<>(chapterPgMap.keySet());
-
-        String lastChapter = chapters.get(chapters.size() - 1);
-        String endOfLastChapter = allChapters.get(allChapters.indexOf(lastChapter) + 1);
-        chapterPgMap.put(endOfLastChapter, map.get(endOfLastChapter));
-
-        pdfInfo.setChapters(chapters);
         pdfInfo.setPdfText(pdfText);
-        pdfInfo.setChapterPgMap(chapterPgMap);
-
         pdfInfo.setFileName(file.getOriginalFilename());
+        if (!pdfText.isEmpty()) {
+            producer.sendMessage(pdfText);
+        }
         document.close();
         return pdfInfo;
     }
