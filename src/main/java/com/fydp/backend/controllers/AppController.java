@@ -117,6 +117,7 @@ public class AppController {
         pdfInfo.setFileName(file.getOriginalFilename());
         if (!pdfText.isEmpty()) {
             producer.sendMessage(pdfText);
+            listener.setMessages(1);
         }
         document.close();
         return pdfInfo;
