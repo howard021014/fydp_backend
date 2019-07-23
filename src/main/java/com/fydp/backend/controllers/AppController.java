@@ -1,6 +1,7 @@
 package com.fydp.backend.controllers;
 
 import com.fydp.backend.model.PdfInfo;
+import com.fydp.backend.kafka.KafkaProducer;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
@@ -39,6 +40,9 @@ public class AppController {
     @Autowired
     private PdfInfo pdfInfo;
 
+    @Autowired
+    private KafkaProducer producer;
+
     @RequestMapping("/")
     public String welcome() {
         logger.debug("Welcome endpoint hit");
@@ -64,6 +68,7 @@ public class AppController {
 
         pdfInfo.setChapterPgMap(chapterPgMap);
         pdfInfo.setPdfText(pdfText);
+        producer.sendMessage(pdfText);
         document .close();
         return pdfInfo;
     }
@@ -86,8 +91,6 @@ public class AppController {
         } catch (IOException ex) {
             logger.error("Error occurred while writing to file", ex);
         }
-
-        return pdfFile;
     }
 
     private PDDocument parsePDF(File file) {
