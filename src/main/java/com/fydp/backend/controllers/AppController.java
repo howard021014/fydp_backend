@@ -1,9 +1,9 @@
 package com.fydp.backend.controllers;
 
+import com.fydp.backend.kafka.KafkaProducer;
+import com.fydp.backend.kafka.MessageListener;
 import com.fydp.backend.model.ChapterTextModel;
 import com.fydp.backend.model.PdfInfo;
-import com.fydp.backend.kafka.KafkaProducer;
-
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,7 +30,7 @@ import java.util.regex.Pattern;
 
 /**
  * Note: A lot of code are basically recreating the PDF document as well as variables that should only be
- *       retrieved once.
+ * retrieved once.
  * TODO: Refactor the code such that we can store and get data from database once the database is implemented
  */
 
@@ -48,6 +49,9 @@ public class AppController {
     private ChapterTextModel chapterTextModel;
 
     @Autowired
+    private MessageListener listener;
+
+    @Autowired
     private KafkaProducer producer;
 
     @RequestMapping("/")
@@ -56,7 +60,21 @@ public class AppController {
         return "index";
     }
 
-    @PostMapping(value =("/upload"), headers=("content-type=multipart/*"))
+    @GetMapping(value = ("/summaries"))
+    public List<String> getSummaries() {
+        logger.info("GET summary endpoint hit");
+
+        try {
+            listener.getLatch().await();
+        } catch (InterruptedException e) {
+            logger.error("Error while waiting for kafka response : " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        return listener.getMessages();
+    }
+
+    @PostMapping(value = ("/upload"), headers = ("content-type=multipart/*"))
     public PdfInfo upload(@RequestParam("file") MultipartFile file) throws IOException {
         logger.debug("Upload endpoint hit");
 
@@ -70,7 +88,7 @@ public class AppController {
                 containsBookMarks = true;
                 storeBookmarks(outline, map, 0);
             } else {
-                pdfText =  new PDFTextStripper().getText(document);
+                pdfText = new PDFTextStripper().getText(document);
             }
         } else {
             logger.error("Not able to load PDF");
@@ -104,7 +122,7 @@ public class AppController {
         return pdfInfo;
     }
 
-    @PostMapping(value="/upload/chapters", consumes = {MediaType.APPLICATION_JSON_VALUE})
+    @PostMapping(value = "/upload/chapters", consumes = {MediaType.APPLICATION_JSON_VALUE})
     public ChapterTextModel parseChapters(@RequestBody PdfInfo response) throws IOException {
         List<String> chapters = response.getChapters();
         Map<String, Integer> pgMap = response.getChapterPgMap();
@@ -125,9 +143,10 @@ public class AppController {
         }
 
         chapterTextModel.setChpTextMap(chapterTxt);
-        for (String text : chapterTxt.values()) {
-            producer.sendMessage(text);
+        for (Map.Entry entry : chapterTxt.entrySet()) {
+            producer.sendMessageWithKey(entry.getKey().toString(), entry.getValue().toString());
         }
+        listener.setMessages(chapterTxt.size());
 
         document.close();
         return chapterTextModel;
@@ -146,7 +165,7 @@ public class AppController {
             logger.error("Unable to create new File", ex);
         }
 
-        try(FileOutputStream os = new FileOutputStream(pdfFile);) {
+        try (FileOutputStream os = new FileOutputStream(pdfFile);) {
             os.write(file.getBytes());
         } catch (IOException ex) {
             logger.error("Error occurred while writing to file", ex);
@@ -169,8 +188,7 @@ public class AppController {
     private void storeBookmarks(PDOutlineNode bookmark, Map<String, Integer> map, int depth) throws IOException {
         PDOutlineItem current = bookmark.getFirstChild();
 
-        while (current != null)
-        {
+        while (current != null) {
             if (depth == 2) {
                 break;
             }
@@ -185,4 +203,5 @@ public class AppController {
             current = current.getNextSibling();
         }
     }
+
 }
