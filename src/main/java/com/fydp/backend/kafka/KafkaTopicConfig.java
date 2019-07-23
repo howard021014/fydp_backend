@@ -16,6 +16,12 @@ public class KafkaTopicConfig {
     @Value(value = "${brevity.kafka.bootstrapAddress}")
     private String bootstrapAddress;
 
+    @Value(value = "${brevity.kafka.egress.topic}")
+    private String egressTopicName;
+
+    @Value(value="${brevity.kafka.ingress.topic}")
+    private String ingressTopicName;
+
     @Bean
     public KafkaAdmin kafkaAdmin() {
         Map<String, Object> configs = new HashMap<>();
@@ -24,7 +30,14 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic topic1() {
-        return new NewTopic("brevity_requests", 1, (short) 1);
+    public NewTopic requestTopic() {
+        return new NewTopic(egressTopicName, 1, (short) 1);
     }
+
+    @Bean
+    public NewTopic responseTopic() {
+        return new NewTopic(ingressTopicName, 1, (short) 1);
+    }
+
+
 }
