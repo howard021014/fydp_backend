@@ -1,6 +1,8 @@
 package com.fydp.backend.controllers;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.interactive.action.PDActionGoTo;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineNode;
@@ -9,21 +11,28 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Controller
 public class AppController {
 
     private static final Logger logger = LoggerFactory.getLogger(AppController.class);
     private static final String UPLOAD_PATH = System.getProperty("user.dir") + "/upload_files/";
+    private static final String CHAPTER_REGEX = "^(?i)\\bChapter\\b";
+    private Map<String, Integer> chapterPgMap = new LinkedHashMap<>();
 
     @RequestMapping("/")
     public String welcome(Model model) {
@@ -37,12 +46,11 @@ public class AppController {
         logger.debug("Upload endpoint hit");
 
         String pdfText = "";
-        List<String> bookmarks = new ArrayList<>();
         PDDocument document = parsePDF(loadPdfFile(file));
         if (document != null) {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline != null) {
-                storeBookmarks(outline, bookmarks);
+                storeBookmarks(outline);
             } else {
                 pdfText =  new PDFTextStripper().getText(document);
             }
@@ -51,7 +59,7 @@ public class AppController {
         }
 
         document.close();
-        model.addAttribute("pdf_text", pdfText.isEmpty() ? bookmarks : pdfText);
+        model.addAttribute("pdf_text", pdfText.isEmpty() ? chapterPgMap.keySet() : pdfText);
         return "output";
     }
 
@@ -88,12 +96,23 @@ public class AppController {
         return doc;
     }
 
-    private void storeBookmarks(PDOutlineNode bookmark, List<String> bookmarks) {
+    private void storeBookmarks(PDOutlineNode bookmark) throws IOException {
         PDOutlineItem current = bookmark.getFirstChild();
+        Pattern pattern = Pattern.compile(CHAPTER_REGEX);
         while (current != null)
         {
-            bookmarks.add(current.getTitle());
-            storeBookmarks(current, bookmarks);
+            Matcher match = pattern.matcher(current.getTitle());
+            if (match.find()) {
+                PDActionGoTo action = (PDActionGoTo) current.getAction();
+                PDPageDestination destination = (PDPageDestination) action.getDestination();
+                int pageNum = 0;
+                if (destination != null) {
+                    pageNum = destination.retrievePageNumber() + 1;
+                }
+                chapterPgMap.put(current.getTitle(), pageNum);
+            }
+
+            storeBookmarks(current);
             current = current.getNextSibling();
         }
     }
