@@ -2,14 +2,15 @@ package com.fydp.backend.model;
 
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Component
 public class PdfInfo {
     private Map<String, Integer> chapterPgMap;
-    private Set<String> chapters;
+    private List<String> chapters;
     private String pdfText;
+    private String fileName;
 
     public PdfInfo() {
 
@@ -23,8 +24,12 @@ public class PdfInfo {
         return chapterPgMap;
     }
 
-    public Set<String> getChapters() {
-        return chapterPgMap.keySet();
+    public void setChapters(List<String> chapters) {
+        this.chapters = chapters;
+    }
+
+    public List<String> getChapters() {
+        return chapters;
     }
 
     public void setPdfText(String pdfText) {
@@ -35,4 +40,11 @@ public class PdfInfo {
         return pdfText;
     }
 
+    public String getFileName() {
+        return fileName;
+    }
+
+    public void setFileName(String fileName) {
+        this.fileName = fileName;
+    }
 }

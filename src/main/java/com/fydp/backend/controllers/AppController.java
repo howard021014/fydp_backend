@@ -1,5 +1,6 @@
 package com.fydp.backend.controllers;
 
+import com.fydp.backend.model.ChapterTextModel;
 import com.fydp.backend.model.PdfInfo;
 import com.fydp.backend.kafka.KafkaProducer;
 
@@ -13,10 +14,8 @@ import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -24,10 +23,15 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+/**
+ * Note: A lot of code are basically recreating the PDF document as well as variables that should only be
+ *       retrieved once.
+ * TODO: Refactor the code such that we can store and get data from database once the database is implemented
+ */
 
 @RestController
 public class AppController {
@@ -41,6 +45,9 @@ public class AppController {
     private PdfInfo pdfInfo;
 
     @Autowired
+    private ChapterTextModel chapterTextModel;
+
+    @Autowired
     private KafkaProducer producer;
 
     @RequestMapping("/")
@@ -49,16 +56,17 @@ public class AppController {
         return "index";
     }
 
-    @PostMapping(value =("/upload"),headers=("content-type=multipart/*"))
+    @PostMapping(value =("/upload"), headers=("content-type=multipart/*"))
     public PdfInfo upload(@RequestParam("file") MultipartFile file) throws IOException {
         logger.debug("Upload endpoint hit");
 
         String pdfText = "";
         PDDocument document = parsePDF(loadPdfFile(file));
+        Map<String, Integer> map = new LinkedHashMap<>();
         if (document != null) {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline != null) {
-                storeBookmarks(outline);
+                storeBookmarks(outline, map, 0);
             } else {
                 pdfText =  new PDFTextStripper().getText(document);
             }
@@ -66,11 +74,57 @@ public class AppController {
             logger.error("Not able to load PDF");
         }
 
-        pdfInfo.setChapterPgMap(chapterPgMap);
+        Pattern pattern = Pattern.compile(CHAPTER_REGEX);
+        for (Map.Entry<String, Integer> entry : map.entrySet()) {
+            Matcher match = pattern.matcher(entry.getKey());
+            if (match.find()) {
+                chapterPgMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        List<String> allChapters = new ArrayList<>(map.keySet());
+        List<String> chapters = new ArrayList<>(chapterPgMap.keySet());
+
+        String lastChapter = chapters.get(chapters.size() - 1);
+        String endOfLastChapter = allChapters.get(allChapters.indexOf(lastChapter) + 1);
+        chapterPgMap.put(endOfLastChapter, map.get(endOfLastChapter));
+
+        pdfInfo.setChapters(chapters);
         pdfInfo.setPdfText(pdfText);
-        producer.sendMessage(pdfText);
-        document .close();
+        pdfInfo.setChapterPgMap(chapterPgMap);
+
+        pdfInfo.setFileName(file.getOriginalFilename());
+        document.close();
         return pdfInfo;
+    }
+
+    @PostMapping(value="/upload/chapters", consumes = {MediaType.APPLICATION_JSON_VALUE})
+    public ChapterTextModel parseChapters(@RequestBody PdfInfo response) throws IOException {
+        List<String> chapters = response.getChapters();
+        Map<String, Integer> pgMap = response.getChapterPgMap();
+        List<String> refChapters = new ArrayList<>(pgMap.keySet());
+        Map<String, String> chapterTxt = new HashMap<>();
+        PDDocument document = parsePDF(new File(UPLOAD_PATH + response.getFileName()));
+        for (String chapter : chapters) {
+            int startPg = pgMap.get(chapter);
+            int endPg = pgMap.get(refChapters.get(refChapters.indexOf(chapter) + 1));
+            try {
+                PDFTextStripper reader = new PDFTextStripper();
+                reader.setStartPage(startPg);
+                reader.setEndPage(endPg - 1);
+                chapterTxt.put(chapter, reader.getText(document));
+            } catch (IOException ex) {
+                logger.error("Unable to create text stripper", ex);
+            }
+        }
+
+        chapterTextModel.setChpTextMap(chapterTxt);
+        for (String text : chapterTxt.values()) {
+            producer.sendMessage(text);
+        }
+
+        document.close();
+        return chapterTextModel;
     }
 
     private File loadPdfFile(MultipartFile file) {
@@ -91,6 +145,8 @@ public class AppController {
         } catch (IOException ex) {
             logger.error("Error occurred while writing to file", ex);
         }
+
+        return pdfFile;
     }
 
     private PDDocument parsePDF(File file) {
@@ -104,23 +160,22 @@ public class AppController {
         return doc;
     }
 
-    private void storeBookmarks(PDOutlineNode bookmark) throws IOException {
+    private void storeBookmarks(PDOutlineNode bookmark, Map<String, Integer> map, int depth) throws IOException {
         PDOutlineItem current = bookmark.getFirstChild();
-        Pattern pattern = Pattern.compile(CHAPTER_REGEX);
+
         while (current != null)
         {
-            Matcher match = pattern.matcher(current.getTitle());
-            if (match.find()) {
-                PDActionGoTo action = (PDActionGoTo) current.getAction();
-                PDPageDestination destination = (PDPageDestination) action.getDestination();
-                int pageNum = 0;
-                if (destination != null) {
-                    pageNum = destination.retrievePageNumber() + 1;
-                }
-                chapterPgMap.put(current.getTitle(), pageNum);
+            if (depth == 2) {
+                break;
             }
-
-            storeBookmarks(current);
+            PDActionGoTo action = (PDActionGoTo) current.getAction();
+            PDPageDestination destination = (PDPageDestination) action.getDestination();
+            int pageNum = 0;
+            if (destination != null) {
+                pageNum = destination.retrievePageNumber() + 1;
+            }
+            map.put(current.getTitle(), pageNum);
+            storeBookmarks(current, map, depth + 1);
             current = current.getNextSibling();
         }
     }
