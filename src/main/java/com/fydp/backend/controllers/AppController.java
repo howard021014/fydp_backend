@@ -74,6 +74,7 @@ public class AppController {
         return listener.getMessages();
     }
 
+    @CrossOrigin(origins = "http://localhost:3000")
     @PostMapping(value = ("/upload"), headers = ("content-type=multipart/*"))
     public PdfInfo upload(@RequestParam("file") MultipartFile file) throws IOException {
         logger.debug("Upload endpoint hit");
