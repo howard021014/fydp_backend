@@ -39,8 +39,8 @@ public class AppController {
 
     private static final Logger logger = LoggerFactory.getLogger(AppController.class);
     private static final String UPLOAD_PATH = System.getProperty("user.dir") + "/upload_files/";
+    private static final String END_OF_CHAPTER = "End of Last Chapter";
     private static final String CHAPTER_REGEX = "^(?i)\\bChapter\\b";
-    private Map<String, Integer> chapterPgMap = new LinkedHashMap<>();
 
     @Autowired
     private PdfInfo pdfInfo;
@@ -82,6 +82,7 @@ public class AppController {
         String pdfText = "";
         PDDocument document = parsePDF(loadPdfFile(file));
         Map<String, Integer> map = new LinkedHashMap<>();
+        Map<String, Integer> chapterPgMap = new LinkedHashMap<>();
         if (document != null) {
             PDDocumentOutline outline = document.getDocumentCatalog().getDocumentOutline();
             if (outline != null) {
@@ -106,9 +107,14 @@ public class AppController {
             List<String> allChapters = new ArrayList<>(map.keySet());
             List<String> chapters = new ArrayList<>(chapterPgMap.keySet());
 
-            String lastChapter = chapters.get(chapters.size() - 1);
-            String endOfLastChapter = allChapters.get(allChapters.indexOf(lastChapter) + 1);
-            chapterPgMap.put(endOfLastChapter, map.get(endOfLastChapter));
+            if (allChapters.size() == chapters.size()) {
+                chapterPgMap.put(END_OF_CHAPTER, document.getNumberOfPages());
+            } else {
+                String lastChapter = chapters.get(chapters.size() - 1);
+                String endOfLastChapter = allChapters.get(allChapters.indexOf(lastChapter) + 1);
+                chapterPgMap.put(endOfLastChapter, map.get(endOfLastChapter));
+            }
+
             pdfInfo.setChapters(chapters);
             pdfInfo.setChapterPgMap(chapterPgMap);
         }
