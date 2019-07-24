@@ -62,7 +62,7 @@ public class AppController {
 
     @CrossOrigin(origins = "http://localhost:3000")
     @GetMapping(value = ("/summaries"))
-    public List<String> getSummaries() {
+    public Map<String, String> getSummaries() {
         logger.info("GET summary endpoint hit");
 
         try {
@@ -154,7 +154,7 @@ public class AppController {
 
         chapterTextModel.setChpTextMap(chapterTxt);
         for (Map.Entry entry : chapterTxt.entrySet()) {
-            producer.sendMessageWithKey(entry.getKey().toString(), entry.getValue().toString());
+            producer.sendMessageWithKey(entry.getValue().toString(), entry.getKey().toString());
         }
         listener.setMessages(chapterTxt.size());
 
