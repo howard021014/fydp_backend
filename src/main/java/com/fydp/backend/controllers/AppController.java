@@ -60,6 +60,7 @@ public class AppController {
         return "index";
     }
 
+    @CrossOrigin(origins = "http://localhost:3000")
     @GetMapping(value = ("/summaries"))
     public List<String> getSummaries() {
         logger.info("GET summary endpoint hit");
@@ -130,6 +131,7 @@ public class AppController {
         return pdfInfo;
     }
 
+    @CrossOrigin(origins = "http://localhost:3000")
     @PostMapping(value = "/upload/chapters", consumes = {MediaType.APPLICATION_JSON_VALUE})
     public ChapterTextModel parseChapters(@RequestBody PdfInfo response) throws IOException {
         List<String> chapters = response.getChapters();
